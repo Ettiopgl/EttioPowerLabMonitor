@@ -1,0 +1,20 @@
+  // boolean encoderA = digitalRead(encoderPinA);  // encoder
+  if ((encoderALast == HIGH) && (encoderA == LOW))
+  {
+    if (digitalRead(encoderPinB) == LOW)
+    {
+      encoderPos--;
+    }
+    else
+    {
+      encoderPos++;
+    }
+    setCurrentLimit = encoderPos * 10.0;
+    ina226P.setAlertType(CURRENT_OVER, setCurrentLimit);
+    ina226N.setAlertType(CURRENT_OVER, setCurrentLimit);
+    tft.setCursor(230, 45);
+    tft.print(setCurrentLimit); // set current Limit
+    tft.setCursor(230, 167);
+    tft.print(setCurrentLimit); // set current Limit
+  }
+  encoderALast = encoderA; // end encoder */
