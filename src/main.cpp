@@ -11,10 +11,10 @@
 #include <Wire.h>
 #include <INA226_WE.h>
 #define I2C_ADDRESS 0x40
-#define I2C_ADDRESS_N 0x41
+//#define I2C_ADDRESS_N 0x41
 #include <Arduino.h>
-#include <SoftwareSerial.h>
-#include <Arduino.h>
+//#include <SoftwareSerial.h>
+
 //+++++++++++++++++++++++++++ For tft9341
 #include "Adafruit_GFX.h"
 #include <Fonts/FreeSerif9pt7b.h>
@@ -41,57 +41,61 @@
 #define WHITE 0xFFFF
 // Use hardware SPI (on Uno, #13, #12, #11) and the above for CS/DC
 Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC);
-//+++++++++++++++++++++++++++++ Ina variabili 
+//+++++++++++++++++++++++++++++ Ina variabili
 float busVoltage_V = 0;
 float current_mAPos = 0;
-float current_mANeg = 0;
+//float current_mANeg = 0;
 float power_mW = 0;
-float setCurrentLimit = 10;
+float setCurrentLimit = 0;
 int interruptAlarmPin = 2;
 // int interruptEncoderPin =3;
 volatile bool event = false;
-const int alarmPin = 4;
-volatile bool powerDown = false;
+const int alarmPin = 4; // D4 disegno On/ff
+volatile bool powerlimit = false;
 //+++++++++++++++++++++++++++++ Variabili encoder
-const int encoderPinA = 3;// ex pin 5
-const int encoderPinB = 6;
-int encoderPos = 0;
-boolean encoderALast = LOW;
-//  int Pos,oldPos; // Enc_New
+boolean setCurrent = HIGH;
+
+
 //+++++++++++++++++++++++++++++ end variabili encoder
 INA226_WE ina226P(I2C_ADDRESS);
-INA226_WE ina226N(I2C_ADDRESS_N);
+//INA226_WE ina226N(I2C_ADDRESS_N);
 //+++++++++++++++++++++++++++++ Variable for swap delay to millis
 unsigned long previousMillis = 0;
-unsigned long interval = 500;
-//+++++++++++++++++++++++++++++ Variable fo debounce botton
-const int buttonPin = 7;  
-int buttonState;
-int lastButtonState = LOW;
-int alarmState = LOW; // conviene sia Basso
+unsigned long interval = 2000;
+//+++++++++++++++++++++++++++++ Variable fo debounce botton from Attiny 85
+//#define attinyID 0x44  /////////////modificare indirizzo su attiny
+#define attinyID 0x08  /////////////modificare indirizzo su attiny
+int buttonStateStartStop;
+int lastButtonStateStartStop = LOW;
 unsigned long lastDebounceTime = 0;
 unsigned long debounceDelay = 50;
+int startState = LOW;  //On - Off corrente On= HIGH
+
+
 //+++++++++++++++++++++++++++++ Funtions
 void displayResults(); // dichiarazione di funzione displayResults (visualizzazione)
 void alert();
 void displayTemplateP();
-void displayTemplateN();
+//void displayTemplateN();
 void displayStart();
+// void buttonDebounce();
 void overLoadCurrent(float maPos, float maNeg, float mAlimit);
 // void doEncoder();  //new encoder
 //+++++++++++++++++++++++++++++ End Funtions
 
 void setup()
 {
+  
+  //powerlimit = true;  // protezione
   Serial.begin(9600);
   Wire.begin();
-  pinMode(encoderPinA, INPUT);
-  pinMode(encoderPinB, INPUT);
-  digitalWrite(encoderPinA,HIGH); 
-  digitalWrite(encoderPinB,HIGH); 
-  pinMode(alarmPin, OUTPUT);
-  pinMode(buttonPin, INPUT);
-  digitalWrite(alarmPin, LOW); // all'inizio deve essere LOW
+ 
+  
+  
+  // pinMode(alarmPin, OUTPUT);  // accensione dei Mos
+  // pinMode(buttonPin, INPUT);  // pulsante   non più usato 
+  //digitalWrite(buttonPin, LOW);
+  
   // Ramo Positivo
   ina226P.init();
   ina226P.setAverage(AVERAGE_16);
@@ -101,12 +105,12 @@ void setup()
   //ina226P.setCurrentRange(MA_800);
   ina226P.setResistorRange(0.01, 6);
   //Ramo Negativo
-  ina226N.init();
-  ina226N.setAverage(AVERAGE_1);
-  ina226N.setConversionTime(CONV_TIME_140);
-  ina226N.enableAlertLatch();
-  ina226N.setAlertType(CURRENT_OVER, setCurrentLimit);
-  ina226N.setResistorRange(0.01, 80);
+  //ina226N.init();
+  //ina226N.setAverage(AVERAGE_16);
+  //ina226N.setConversionTime(CONV_TIME_140);
+  //ina226N.enableAlertLatch();
+  //ina226N.setAlertType(CURRENT_OVER, setCurrentLimit);
+  //ina226N.setResistorRange(0.01, 6);
   attachInterrupt(digitalPinToInterrupt(interruptAlarmPin), alert, FALLING);
   //attachInterrupt(1, doEncoder, FALLING);  //New Enc
 
@@ -114,87 +118,99 @@ void setup()
   tft.fillScreen(0);
   tft.setRotation(1); // ORIZZONTALE      0=VERTICALE Rotazione del display
   tft.setTextSize(3); //DIMENSIONI DEL FONT
-  displayStart();
+  //displayStart(); //  gestione puntini
   displayTemplateP();
-  displayTemplateN();
+  //displayTemplateN();
 }
 
 void loop()
 {
+  //Serial.print("Bus Voltage [V+]: "); Serial.println(busVoltage_V);
+  
+
   unsigned long currentMillis = millis();
 
-
-  boolean encoderA = digitalRead(encoderPinA);  // encoder
-  if ((encoderALast == HIGH) && (encoderA == LOW))
+  //////////////////////// encoder  from Attiny85
+Wire.requestFrom(attinyID,2); //REQUEST 1 BUTE
+  byte encoderPos = Wire.read();
+  byte readingButton = Wire.read();
+  if(readingButton != lastButtonStateStartStop)
   {
-    if (digitalRead(encoderPinB) == LOW)
-    {
-      encoderPos--;
-    }
-    else
-    {
-      encoderPos++;
-    }
-    setCurrentLimit = encoderPos * 10.0;
-    ina226P.setAlertType(CURRENT_OVER, setCurrentLimit);
-    ina226N.setAlertType(CURRENT_OVER, setCurrentLimit);
-    tft.setCursor(230, 45);
-    tft.print(setCurrentLimit); // set current Limit
-    tft.setCursor(230, 167);
-    tft.print(setCurrentLimit); // set current Limit
+    lastDebounceTime = millis();
   }
-  encoderALast = encoderA; // end encoder */
-
-
-
-
-
-/* uint8_t oldSREG = SREG;  // ++++++++++++++++++++++++++++++++++new encoder
-cli();  // disattiva interrupt
-Pos = encoderPos;
-SREG = oldSREG;
-if(Pos !=oldPos)
-{
-  oldPos = Pos;
-  setCurrentLimit = Pos * 10.0;
-    ina226P.setAlertType(CURRENT_OVER, setCurrentLimit);
-    ina226N.setAlertType(CURRENT_OVER, setCurrentLimit);
-    Serial.print("CurrentLimit_Set=");
-      Serial.println(setCurrentLimit);
-   }  //+++++++++++++++++++++++++++++++++++++++++++++++++end new encoder
- */
-
-
-
-
-
+  if((millis() - lastDebounceTime) >  debounceDelay)
+  {
+    if (readingButton != buttonStateStartStop)
+    {
+      buttonStateStartStop = readingButton;
+      if(buttonStateStartStop == LOW)
+      {
+        startState = ! startState;
+      }
+    }
+  }
+lastButtonStateStartStop = readingButton;
+  
+  Serial.print("encoderPos="); Serial.println(encoderPos);
+  Serial.print("readingButton="); Serial.println(readingButton);
+      
+    //  setCurrentLimit = encoderPos * 10.0;  // mA
+      
+      ina226P.setAlertType(CURRENT_OVER, setCurrentLimit);
+    //  ina226N.setAlertType(CURRENT_OVER, setCurrentLimit);
+      tft.setCursor(200, 45);
+      tft.print(setCurrentLimit); // set current Limit
+      tft.setCursor(230, 167);
+      tft.print(setCurrentLimit); // set current Limit
+      
+   
+////////////////// end encoder from Attiny85
+   
+  //  
+//Serial.print("event = "); Serial.println(event );
   if (event)
   {
-    current_mAPos = ina226P.getCurrent_mA(); // qui legge la corrente che supera limit alert
-    current_mANeg = ina226N.getCurrent_mA();
+    Serial.print("event  [V+]: ");
+ina226P.readAndClearFlags();
+    displayResults();
+ // attachInterrupt(digitalPinToInterrupt(interruptPin), alert, FALLING); 
+   attachInterrupt(digitalPinToInterrupt(interruptAlarmPin), alert, FALLING);
+
+    //current_mAPos = ina226P.getCurrent_mA(); // qui legge la corrente che supera limit alert
+    
+    //current_mANeg = ina226N.getCurrent_mA();
+
+
+
 
     //ina226P.readAndClearFlags(); // reads interrupt and overflow flags and deletes them
-    ina226P.powerDown(); // salva il contenuto del registro di conf e disabilita l'ina
-    ina226P.readAndClearFlags();
-    ina226N.powerDown();
-    ina226N.readAndClearFlags();
-    attachInterrupt(digitalPinToInterrupt(interruptAlarmPin), alert, FALLING);
-    powerDown = true;
+    //ina226P.powerDown(); // salva il contenuto del registro di conf e disabilita l'ina
+    //ina226P.readAndClearFlags();
+    //ina226N.powerDown();
+    //ina226N.readAndClearFlags();
+  // attachInterrupt(digitalPinToInterrupt(interruptAlarmPin), alert, FALLING);
+    //powerlimit = true;
     event = false;
+    //delay (1000);
   }
+//delay (1000);
+
 
   if (currentMillis - previousMillis > interval)
   {
-    if (powerDown)
+    if (powerlimit)
     {
-      Serial.println("Limit Alert- Power Down");
-      //float current_mA = 0;
-      //current_mA = ina226P.getCurrent_mA();
+Serial.print("event= "); Serial.println(event);
 
+      Serial.println("Limit Alert- Power Down");
       Serial.print("OverLoad_Current[mA]_Pos: ");
       Serial.println(current_mAPos);
-      Serial.print("Overload_current[mA]_Neg:");
-      Serial.println(current_mANeg);
+      //Serial.print("Overload_current[mA]_Neg:");
+     //Serial.println(current_mANeg);
+     // Serial.print("encoderPos = ");
+     // Serial.print(encoderPos);
+      //Serial.print("   Start =");
+      //Serial.println(startState);
       Serial.print("CurrentLimit_Set=");
       Serial.println(setCurrentLimit);
       // overLoadCurrent(current_mAPos,current_mANeg,setCurrentLimit);
@@ -205,66 +221,32 @@ if(Pos !=oldPos)
     }
     previousMillis = currentMillis;
   } //end millis
-  //delay(3000);
+  
 
   //// debounce
-  int reading = digitalRead(buttonPin);
-  if (reading != lastButtonState)
-  {
-    lastDebounceTime = millis();
-  }
-  if ((millis() - lastDebounceTime) > debounceDelay)
-  {
-    if (reading != buttonState)
-    {
-      buttonState = reading;
+ //  buttonDebounce();
 
-      if (buttonState == HIGH)
-      {
-        (alarmState = !alarmState);
-        digitalWrite(alarmPin, alarmState);
-        if (powerDown)
-        {
-          ina226P.powerUp();
-          ina226P.readAndClearFlags();
-          ina226N.powerUp();
-          ina226N.readAndClearFlags();
-          tft.setCursor(260, 5);
-          tft.setTextColor(RED, 0x0000);
-          tft.print("ON "); // set current Limit
-          tft.setCursor(260, 125);
-          tft.setTextColor(BLUE, 0x0000);
-          tft.print("ON "); // set current Limit
-          powerDown = false;
-        }
-        else
-        {
-          tft.setCursor(260, 5);
-          tft.setTextColor(RED, 0x0000);
-          tft.print("OFF"); // set current Limit
-          tft.setCursor(260, 125);
-          tft.setTextColor(BLUE, 0x0000);
-          tft.print("OFF"); // set current Limit
-        }
-      }
-    }
-  }
-
-  lastButtonState = reading;
-  //// fine debounce
+  
 } // end loop
 
 void displayResults()
 {
   busVoltage_V = 0.0;
   current_mAPos = 0.0;
-  current_mANeg = 0.0;
+  //current_mANeg = 0.0;
   power_mW = 0.0;
 
   // Ramo Positivo
   busVoltage_V = ina226P.getBusVoltage_V();
   current_mAPos = ina226P.getCurrent_mA();
   power_mW = ina226P.getBusPower();
+  Serial.print("Bus Voltage [V+]: "); Serial.println(busVoltage_V);
+  
+  Serial.print("Current[mA] + : "); Serial.println(current_mAPos);
+  Serial.print("Bus Power [mW] +: "); Serial.println(power_mW);
+
+
+
   if (ina226P.limitAlert)
   {
     Serial.println("Limit Alert !!!!");
@@ -273,9 +255,8 @@ void displayResults()
   {
     Serial.println("Conversion Alert!!!!");
   }
-  /*
-  Serial.print("Shunt Voltage [mV]: ");
-  Serial.println(shuntVoltage_mV);
+  
+ 
   Serial.print("Bus Voltage [V]: ");
   Serial.println(busVoltage_V);
   Serial.print("Load Voltage [V+]: ");
@@ -285,13 +266,16 @@ void displayResults()
   Serial.println("Set-limit-current in mA + = " + String(setCurrentLimit));
   Serial.print("Bus Power [mW+]: ");
   Serial.println(power_mW);
-*/
+
   tft.setCursor(60, 5); //tft.setCursor(70,5);
   tft.setTextColor(WHITE, 0x0000);
   tft.print(busVoltage_V);
   tft.setCursor(60, 45); //tft.setCursor(70,5);
   float current_APos = current_mAPos / 1000;
   tft.print(current_APos);
+
+  tft.setCursor(200, 45);
+  tft.print(setCurrentLimit); // set current Limit
   tft.setCursor(60, 90); //tft.setCursor(70,5);
   float power_W = power_mW / 1000;
   tft.print(power_W);
@@ -299,7 +283,7 @@ void displayResults()
   if (!ina226P.overflow)
   {
     displayTemplateP();
-    displayTemplateN();
+    //displayTemplateN();
     Serial.println("++++++++++++++Values OK - no overflow");
   }
   else
@@ -309,6 +293,8 @@ void displayResults()
   }
   Serial.println();
 
+
+/*
   // ramo Negativo
   //shuntVoltage_mV = ina226N.getShuntVoltage_mV();
   busVoltage_V = ina226N.getBusVoltage_V();
@@ -324,12 +310,12 @@ void displayResults()
   {
     Serial.println("Conversion Alert!!!!");
   }
-  /*
+  
   Serial.print("Shunt Voltage [mV]: ");
   Serial.println(shuntVoltage_mV);
   Serial.print("Bus Voltage [V]: ");
   Serial.println(busVoltage_V);
-  */
+  
   Serial.print("Load Voltage [V-]: ");
   Serial.println(busVoltage_V);
   Serial.print("Current[mA-]: ");
@@ -345,7 +331,7 @@ void displayResults()
   tft.setCursor(60, 210); //tft.setCursor(70,5);
   tft.print(power_mW);
 
-  tft.setCursor(200,167);
+  tft.setCursor(200, 167);
   tft.print(setCurrentLimit); // set current Limit
 
   if (!ina226N.overflow)
@@ -359,13 +345,16 @@ void displayResults()
     Serial.println("----------- Overflow! Choose higher current range");
   }
   Serial.println();
+
+*/
   // end displayResult
 }
+
 
 void alert()
 {
   //delay(100);
-  digitalWrite(alarmPin, LOW); // con il relè deve andare LOW
+  //digitalWrite(alarmPin, LOW); // con il relè deve andare LOW
   event = true;
   detachInterrupt(2);
   // overLoadCurrent();
@@ -385,6 +374,8 @@ void displayTemplateP()
   tft.setCursor(135, 45);
   tft.print("Il="); // set current Limit
 }
+
+/*
 void displayTemplateN()
 {
   // ramo negativo
@@ -401,6 +392,9 @@ void displayTemplateN()
   tft.print("Il="); // set current Limit
   // end tft
 }
+*/
+
+/////////////////// gestione puntini su start////////////////
 void displayStart()
 {
   const int xMax = 320;
@@ -415,7 +409,7 @@ void displayStart()
     yrandom = random(yMax);
     tft.drawPixel(xrandom, yrandom, WHITE);
   }
-  delay(1000);
+  delay(500);
   tft.fillScreen(0); // cancella lo schermo
   tft.setFont(&FreeSerif9pt7b);
   // tft.setFont();  //Carattere di default
@@ -449,16 +443,8 @@ void overLoadCurrent(float mAPos, float mANeg, float mALimit)
   tft.setCursor(260, 125);
   tft.print("OFF"); // set current Limit
 }
-void doEncoder()
-{
- if(digitalRead(encoderPinA) == digitalRead(encoderPinB))
-
- 
-  encoderPos ++;  // scambio rotazione
-  else{
-encoderPos --;
-  } 
- 
 
 
-}
+
+
+
