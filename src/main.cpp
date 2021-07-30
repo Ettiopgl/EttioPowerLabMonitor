@@ -152,7 +152,7 @@ Wire.requestFrom(attinyID,2); //REQUEST 1 BUTE
 lastButtonStateStartStop = readingButton;
   
   Serial.print("encoderPos="); Serial.println(encoderPos);
-  Serial.print("readingButton="); Serial.println(readingButton);
+  Serial.print("startState="); Serial.println(startState);
       
     //  setCurrentLimit = encoderPos * 10.0;  // mA
       
@@ -175,6 +175,7 @@ ina226P.readAndClearFlags();
     displayResults();
  // attachInterrupt(digitalPinToInterrupt(interruptPin), alert, FALLING); 
    attachInterrupt(digitalPinToInterrupt(interruptAlarmPin), alert, FALLING);
+    ina226P.readAndClearFlags(); 
 
     //current_mAPos = ina226P.getCurrent_mA(); // qui legge la corrente che supera limit alert
     
