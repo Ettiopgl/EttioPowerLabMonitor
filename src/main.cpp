@@ -132,6 +132,7 @@ void loop()
 
   //////////////////////// encoder  from Attiny85
 Wire.requestFrom(attinyID,2); //REQUEST 1 BUTE
+
   byte encoderPos = Wire.read();
   byte readingButton = Wire.read();
   if(readingButton != lastButtonStateStartStop)
@@ -154,15 +155,14 @@ lastButtonStateStartStop = readingButton;
   Serial.print("encoderPos="); Serial.println(encoderPos);
   Serial.print("startState="); Serial.println(startState);
       
-    //  setCurrentLimit = encoderPos * 10.0;  // mA
+    setCurrentLimit = encoderPos * 10;  // mA
       
       ina226P.setAlertType(CURRENT_OVER, setCurrentLimit);
     //  ina226N.setAlertType(CURRENT_OVER, setCurrentLimit);
-      tft.setCursor(200, 45);
-      tft.print(setCurrentLimit); // set current Limit
-      tft.setCursor(230, 167);
-      tft.print(setCurrentLimit); // set current Limit
       
+     // tft.setCursor(220,5);
+     // tft.print(setCurrentLimit); // set current Limit
+      displayResults();
    
 ////////////////// end encoder from Attiny85
    
@@ -170,14 +170,14 @@ lastButtonStateStartStop = readingButton;
 //Serial.print("event = "); Serial.println(event );
   if (event)
   {
-    Serial.print("event  [V+]: ");
+    //Serial.print("event  [V+]: ");
 ina226P.readAndClearFlags();
     displayResults();
  // attachInterrupt(digitalPinToInterrupt(interruptPin), alert, FALLING); 
    attachInterrupt(digitalPinToInterrupt(interruptAlarmPin), alert, FALLING);
     ina226P.readAndClearFlags(); 
 
-    //current_mAPos = ina226P.getCurrent_mA(); // qui legge la corrente che supera limit alert
+    current_mAPos = ina226P.getCurrent_mA(); // qui legge la corrente che supera limit alert
     
     //current_mANeg = ina226N.getCurrent_mA();
 
@@ -270,16 +270,26 @@ void displayResults()
 
   tft.setCursor(60, 5); //tft.setCursor(70,5);
   tft.setTextColor(WHITE, 0x0000);
-  tft.print(busVoltage_V);
+  //char xbusVoltage_V [4];
+  char x [4];
+  dtostrf(busVoltage_V,2,2,x); // visualizzazione con 2interi e 2 cifre decimali
+  tft.print(x);
   tft.setCursor(60, 45); //tft.setCursor(70,5);
   float current_APos = current_mAPos / 1000;
+  dtostrf(current_mAPos,1,2,x); // visualizzazione con 1interi e 2 cifre decimali
   tft.print(current_APos);
 
-  tft.setCursor(200, 45);
-  tft.print(setCurrentLimit); // set current Limit
   tft.setCursor(60, 90); //tft.setCursor(70,5);
   float power_W = power_mW / 1000;
-  tft.print(power_W);
+dtostrf(power_W,3,1,x);       // visualizzazione con 2interi e 2 cifre decimali
+  //tft.print(power_W);
+  tft.print(x);
+tft.setTextColor(GREEN, 0x0000);
+tft.setCursor(225, 5); // y=45
+float setCurrentLimitInA =setCurrentLimit/100;
+dtostrf(setCurrentLimitInA,1,2,x);
+  //tft.print(setCurrentLimit); // set current Limit
+tft.print(x); // set current Limit
 
   if (!ina226P.overflow)
   {
@@ -371,9 +381,12 @@ void displayTemplateP()
   tft.setCursor(3, 90);
   tft.print("W =");
   tft.setCursor(3, 45);
-  tft.print("I+=");
-  tft.setCursor(135, 45);
-  tft.print("Il="); // set current Limit
+  tft.print("I+");
+  tft.setCursor(160, 5);
+  tft.setTextColor(GREEN,0x0000);
+  tft.print("Il=");
+  //tft.setCursor(150, 45);
+  //tft.print("Il="); // set current Limit
 }
 
 /*
@@ -389,8 +402,8 @@ void displayTemplateN()
   tft.print("I =");
   tft.setCursor(4, 210);
   tft.print("W =");
-  tft.setCursor(135, 167);
-  tft.print("Il="); // set current Limit
+  //tft.setCursor(135, 167);
+  //tft.print("Il="); // set current Limit
   // end tft
 }
 */
