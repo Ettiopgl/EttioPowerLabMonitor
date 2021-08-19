@@ -1,3 +1,5 @@
+  
+  /*
   // boolean encoderA = digitalRead(encoderPinA);  // encoder
   if ((encoderALast == HIGH) && (encoderA == LOW))
   {
@@ -18,3 +20,9 @@
     tft.print(setCurrentLimit); // set current Limit
   }
   encoderALast = encoderA; // end encoder */
+
+  */
+
+
+  con il ciclo while  per ora non ha funzionatoa dovere , rimane sempre una lettura non corretta
+  
